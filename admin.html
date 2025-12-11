@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8" />
+<title>Secret Santa Admin</title>
+
+<style>
+body { font-family: sans-serif; padding: 20px; max-width: 800px; margin: auto; }
+.hidden { display: none; }
+textarea { width: 100%; height: 150px; margin-top: 15px; }
+button { padding: 10px 20px; margin-top: 10px; font-size: 1.1em; cursor: pointer; }
+pre { background: #f4f4f4; padding: 15px; border-radius: 8px; white-space: pre-wrap; }
+input { padding: 10px; font-size: 1em; width: 200px; }
+</style>
+</head>
+
+<body>
+
+<h1>🔐 Secret Santa Admin Panel</h1>
+
+<!-- LOGIN -->
+<div id="loginSection">
+    <p>Enter admin PIN:</p>
+    <input type="password" id="adminPinInput" />
+    <button onclick="checkPin()">Enter</button>
+    <p id="loginError" style="color:red"></p>
+</div>
+
+<!-- ADMIN PANEL -->
+<!-- ADMIN PANEL -->
+<div id="adminPanel" class="hidden">
+    <h2>Enter participant names (one per line):</h2>
+    <textarea id="namesInput"></textarea>
+
+    <button onclick="generate()">Generate Assignments & Save</button>
+
+    <button style="background:#c62828; color:white;" onclick="deleteAssignments()">❌ Delete Assignments</button>
+
+    <h2>Generated Links:</h2>
+    <pre id="linksOutput"></pre>
+</div>
+
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.6.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.6.0/firebase-firestore-compat.js"></script>
+
+<script>
+// -------------------------------------------------------------
+// 🔥 YOUR FIREBASE CONFIG — REPLACE THIS BLOCK
+// -------------------------------------------------------------
+const firebaseConfig = {
+  apiKey: "AIzaSyBUbmtR7uU9YaUDeGDOS4Q-IP2zC90kPmc",
+  authDomain: "secret-santa-d2b69.firebaseapp.com",
+  projectId: "secret-santa-d2b69",
+  storageBucket: "secret-santa-d2b69.appspot.com",
+  messagingSenderId: "190272496238",
+  appId: "1:190272496238:web:4547ce0af13692973dfc7f",
+  measurementId: "G-F5NZFG8298"
+};
+// -------------------------------------------------------------
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// 🔐 Admin PIN (change if you want)
+const ADMIN_PIN = "1234";
+
+// Unlock admin area
+function checkPin() {
+    const entered = document.getElementById("adminPinInput").value.trim();
+    if (entered === ADMIN_PIN) {
+        document.getElementById("loginSection").classList.add("hidden");
+        document.getElementById("adminPanel").classList.remove("hidden");
+    } else {
+        document.getElementById("loginError").innerHTML = "Incorrect PIN";
+    }
+}
+
+async function deleteAssignments() {
+    const confirmed = confirm("❌ Are you sure? This will delete ALL Secret Santa assignments!");
+
+    if (!confirmed) return;
+
+    try {
+        await db.collection("secretSanta").doc("assignments").delete();
+        alert("Assignments deleted successfully!");
+
+        // Clear screen output
+        document.getElementById("linksOutput").textContent = "";
+        document.getElementById("namesInput").value = "";
+    } catch (err) {
+        console.error("Delete error:", err);
+        alert("❌ Could not delete assignments. Check console for details.");
+    }
+}
+
+
+function randomID() {
+    return Math.random().toString(36).substring(2, 8).toUpperCase();
+}
+
+function shuffle(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+        let j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+}
+
+// MAIN GENERATE FUNCTION
+async function generate() {
+    const names = document.getElementById("namesInput").value
+        .split("\n")
+        .map(n => n.trim())
+        .filter(n => n.length > 0);
+
+    if (names.length < 2) {
+        alert("Enter at least 2 names.");
+        return;
+    }
+
+    // Generate random IDs
+    let ids = {};
+    names.forEach(name => {
+        let id = randomID();
+        while (ids[id]) id = randomID(); // ensure uniqueness
+        ids[id] = name;
+    });
+
+    // Shuffle assignments
+    let shuffled = [...names];
+    shuffle(shuffled);
+
+    for (let i = 0; i < names.length; i++) {
+        if (names[i] === shuffled[i]) {
+            shuffle(shuffled);
+            i = -1;
+        }
+    }
+
+    let assignments = {};
+    names.forEach((n, i) => assignments[n] = shuffled[i]);
+
+    // Try saving to Firestore
+    try {
+        await db.collection("secretSanta").doc("assignments").set({
+            ids,
+            assignments
+        });
+        alert("Assignments saved to Firestore!");
+    } catch (err) {
+        console.error("Firestore error:", err);
+        alert("❌ Could not write to Firestore. Check console.");
+    }
+
+    // ALWAYS show generated links
+    const baseUrl = "https://secret-santa-131211.netlify.app"; // ← YOUR URL IS NOW HERE
+    const links = Object.keys(ids)
+        .map(id => `${baseUrl}/?id=${id}`)
+        .join("\n");
+
+    document.getElementById("linksOutput").textContent = links;
+}
+</script>
+
+</body>
+</html>

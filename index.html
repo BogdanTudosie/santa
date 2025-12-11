@@ -1,227 +1,125 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Secret Santa Assignment</title>
-    <style>
-        body {
-            font-family: 'Segoe UI', sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Secret Santa Reveal</title>
 
-        .container {
-            background: white;
-            padding: 40px;
-            border-radius: 10px;
-            max-width: 700px;
-            width: 100%;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-        }
-
-        h1 {
-            text-align: center;
-            margin-bottom: 30px;
-            color: #333;
-        }
-
-        select {
-            padding: 12px;
-            border: 2px solid #667eea;
-            border-radius: 6px;
-            width: 100%;
-            font-size: 1em;
-        }
-
-        select:disabled {
-            background-color: #ddd;
-            cursor: not-allowed;
-        }
-
-        .recipient-display {
-            margin-top: 30px;
-            background: #f8f9fa;
-            padding: 25px;
-            border-radius: 10px;
-            text-align: center;
-        }
-
-        .assigned-recipient {
-            background: white;
-            border: 3px solid #28a745;
-            padding: 20px;
-            border-radius: 10px;
-            margin-bottom: 15px;
-        }
-
-        .assigned-recipient .person-name {
-            font-size: 1.6em;
-            color: #28a745;
-            font-weight: bold;
-        }
-    </style>
+<style>
+body {
+    font-family: "Segoe UI", sans-serif;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+}
+.container {
+    background: white;
+    padding: 35px;
+    border-radius: 12px;
+    max-width: 600px;
+    width: 100%;
+    text-align: center;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+}
+.assignment-box {
+    margin-top: 25px;
+    background: #f8f9fa;
+    padding: 25px;
+    border-radius: 10px;
+    border-left: 4px solid #28a745;
+}
+</style>
 </head>
 
 <body>
 <div class="container">
-    <h1>🎅 Secret Santa Assignment 🎁</h1>
-
-    <label>Select Your Name:</label>
-    <!-- DISABLED UNTIL FIRESTORE LOADS -->
-    <select id="nameSelect" onchange="showAssignment()" disabled>
-        <option value="">Loading...</option>
-    </select>
-
-    <div id="assignmentResult"></div>
+    <h1>🎅 Secret Santa Reveal</h1>
+    <div id="message">Loading...</div>
+    <div id="result"></div>
 </div>
 
-<!-- Firebase SDK (compat for global firebase) -->
+<!-- Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/10.6.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.6.0/firebase-firestore-compat.js"></script>
 
 <script>
-    /*********************************************************
-     * 🔥 STEP 1 — INSERT YOUR FIREBASE CONFIG HERE
-     *********************************************************/
-    const firebaseConfig = {
-        apiKey: "AIzaSyBUbmtR7uU9YaUDeGDOS4Q-IP2zC90kPmc",
-        authDomain: "secret-santa-d2b69.firebaseapp.com",
-        projectId: "secret-santa-d2b69",
-        storageBucket: "secret-santa-d2b69.appspot.com",
-        messagingSenderId: "190272496238",
-        appId: "1:190272496238:web:4547ce0af13692973dfc7f",
-        measurementId: "G-F5NZFG8298"
-    };
+// -------------------------------------------------------------
+// 🔥 INSERT YOUR FIREBASE CONFIG HERE
+// -------------------------------------------------------------
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyBUbmtR7uU9YaUDeGDOS4Q-IP2zC90kPmc",
+  authDomain: "secret-santa-d2b69.firebaseapp.com",
+  projectId: "secret-santa-d2b69",
+  storageBucket: "secret-santa-d2b69.firebasestorage.app",
+  messagingSenderId: "190272496238",
+  appId: "1:190272496238:web:4547ce0af13692973dfc7f",
+  measurementId: "G-F5NZFG8298"
+};
+// -------------------------------------------------------------
 
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.firestore();
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
 
-    /*********************************************************
-     * 👥 PARTICIPANTS LIST — customize any time
-     *********************************************************/
-    const people = [
-        "Alice Johnson",
-        "Bob Smith",
-        "Carol White",
-        "David Brown",
-        "Emma Davis",
-        "Frank Miller",
-        "Grace Lee",
-        "Henry Wilson"
-    ];
+// Read ?id=XXXX from URL
+const params = new URLSearchParams(window.location.search);
+const userID = params.get("id");
 
-    const select = document.getElementById("nameSelect");
-    const resultDiv = document.getElementById("assignmentResult");
+const message = document.getElementById("message");
+const result = document.getElementById("result");
 
-    /*********************************************************
-     * 🎁 LOAD OR CREATE ASSIGNMENTS (ASYNC)
-     *********************************************************/
-    let assignments = {};
-
-    async function loadAssignments() {
-        const docRef = db.collection("secretSanta").doc("assignments");
-        const snapshot = await docRef.get();
-
-        if (snapshot.exists) {
-            console.log("Loaded saved assignments.");
-            assignments = snapshot.data();
-        } else {
-            console.log("No assignments found — generating new ones!");
-            assignments = generateAssignments();
-            await docRef.set(assignments);
-            console.log("Assignments saved to Firestore.");
-        }
-
-        // CLEAR UI & ENABLE DROPDOWN
-        initializeDropdown();
+async function load() {
+    // If no ID provided
+    if (!userID) {
+        message.innerHTML = "❌ Invalid or missing link.";
+        return;
     }
 
-    /*********************************************************
-     * 🔄 GENERATE SECRET SANTA PAIRS
-     *********************************************************/
-    function generateAssignments() {
-        const shuffled = [...people];
-        shuffle(shuffled);
+    try {
+        const snap = await db.collection("secretSanta").doc("assignments").get();
 
-        // Prevent self-assignment
-        for (let i = 0; i < people.length; i++) {
-            if (people[i] === shuffled[i]) {
-                return generateAssignments(); // regen
-            }
-        }
-
-        const result = {};
-        for (let i = 0; i < people.length; i++) {
-            result[people[i]] = shuffled[i];
-        }
-        return result;
-    }
-
-    // Fisher-Yates shuffle
-    function shuffle(arr) {
-        for (let i = arr.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [arr[i], arr[j]] = [arr[j], arr[i]];
-        }
-    }
-
-    /*********************************************************
-     * 🎄 ENABLE UI ONLY AFTER FIRESTORE LOADS
-     *********************************************************/
-    function initializeDropdown() {
-        // Clear placeholder
-        select.innerHTML = '<option value="">-- Choose Your Name --</option>';
-
-        // Populate names
-        people.forEach(name => {
-            const opt = document.createElement("option");
-            opt.value = name;
-            opt.textContent = name;
-            select.appendChild(opt);
-        });
-
-        // Reset UI
-        select.value = "";
-        resultDiv.innerHTML = "";
-
-        // ENABLE DROPDOWN
-        select.disabled = false;
-    }
-
-    /*********************************************************
-     * 👀 SHOW USER THEIR RECIPIENT
-     *********************************************************/
-    function showAssignment() {
-        const name = select.value;
-
-        if (!name) {
-            resultDiv.innerHTML = "";
+        if (!snap.exists) {
+            message.innerHTML = "❌ Configuration not found.";
             return;
         }
 
-        const recipient = assignments[name];
+        const data = snap.data();
 
-        resultDiv.innerHTML = `
-            <div class="recipient-display">
+        // Look up name by private ID
+        const name = data.ids[userID];
+
+        if (!name) {
+            message.innerHTML = "❌ Unknown or expired link.";
+            return;
+        }
+
+        // Look up recipient
+        const recipient = data.assignments[name];
+
+        if (!recipient) {
+            message.innerHTML = "❌ Assignment missing for this user.";
+            return;
+        }
+
+        // Success!
+        message.innerHTML = "";
+        result.innerHTML = `
+            <div class="assignment-box">
                 <h2>You are Secret Santa for:</h2>
-                <div class="assigned-recipient">
-                    <div class="person-name">${recipient}</div>
-                </div>
-                <p style="color:#667eea;">Keep it a secret! 🤫</p>
+                <h1>${recipient}</h1>
             </div>
         `;
+
+    } catch (err) {
+        console.error("Error:", err);
+        message.innerHTML = "❌ There was a problem loading your assignment.";
     }
+}
 
-    /*********************************************************
-     * 🚀 START APPLICATION
-     *********************************************************/
-    loadAssignments();
+load();
 </script>
-
 </body>
 </html>
