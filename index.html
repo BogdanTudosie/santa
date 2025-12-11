@@ -5,14 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Secret Santa Assignment</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Segoe UI', sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             display: flex;
@@ -23,219 +17,211 @@
 
         .container {
             background: white;
-            border-radius: 10px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
             padding: 40px;
+            border-radius: 10px;
             max-width: 700px;
             width: 100%;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
         }
 
         h1 {
             text-align: center;
-            color: #333;
             margin-bottom: 30px;
-            font-size: 2.3em;
-        }
-
-        .lookup-form {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-            align-items: center;
-            margin-bottom: 40px;
-        }
-
-        .form-group {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            width: 100%;
-            max-width: 400px;
-        }
-
-        .form-group label {
-            font-weight: bold;
             color: #333;
-            font-size: 1.1em;
         }
 
-        .form-group select {
+        select {
             padding: 12px;
             border: 2px solid #667eea;
-            border-radius: 5px;
+            border-radius: 6px;
+            width: 100%;
             font-size: 1em;
-            cursor: pointer;
-            background-color: white;
+        }
+
+        select:disabled {
+            background-color: #ddd;
+            cursor: not-allowed;
         }
 
         .recipient-display {
-            text-align: center;
-            padding: 30px;
+            margin-top: 30px;
             background: #f8f9fa;
+            padding: 25px;
             border-radius: 10px;
-            margin-top: 20px;
-        }
-
-        .recipient-display h2 {
-            color: #667eea;
-            margin-bottom: 20px;
+            text-align: center;
         }
 
         .assigned-recipient {
             background: white;
             border: 3px solid #28a745;
-            padding: 25px;
+            padding: 20px;
             border-radius: 10px;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
         }
 
         .assigned-recipient .person-name {
-            font-size: 1.5em;
+            font-size: 1.6em;
             color: #28a745;
-        }
-
-        .assigned-recipient .person-phone {
-            font-size: 1.1em;
-            margin-top: 10px;
-        }
-
-        .result-message {
-            text-align: center;
-            color: #667eea;
-            font-size: 1.2em;
             font-weight: bold;
-            margin-top: 20px;
         }
-
     </style>
 </head>
 
 <body>
-    <div class="container">
-        <h1>🎅 Secret Santa Assignment 🎁</h1>
+<div class="container">
+    <h1>🎅 Secret Santa Assignment 🎁</h1>
 
-        <div class="lookup-form">
-            <div class="form-group">
-                <label for="santaNameSelect">Select Your Name to See Your Assignment:</label>
-                <select id="santaNameSelect" onchange="showAssignment()">
-                    <option value="">-- Choose Your Name --</option>
-                </select>
-            </div>
-        </div>
+    <label>Select Your Name:</label>
+    <!-- DISABLED UNTIL FIRESTORE LOADS -->
+    <select id="nameSelect" onchange="showAssignment()" disabled>
+        <option value="">Loading...</option>
+    </select>
 
-        <div id="assignmentResult"></div>
-        <div class="result-message" id="resultMessage"></div>
-    </div>
+    <div id="assignmentResult"></div>
+</div>
 
-    <script>
-        const people = {
-            "Alice Johnson": "555-0101",
-            "Bob Smith": "555-0102",
-            "Carol White": "555-0103",
-            "David Brown": "555-0104",
-            "Emma Davis": "555-0105",
-            "Frank Miller": "555-0106",
-            "Grace Lee": "555-0107",
-            "Henry Wilson": "555-0108"
-        };
+<!-- Firebase SDK (compat for global firebase) -->
+<script src="https://www.gstatic.com/firebasejs/10.6.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.6.0/firebase-firestore-compat.js"></script>
 
-        let santaAssignments = {};
+<script>
+    /*********************************************************
+     * 🔥 STEP 1 — INSERT YOUR FIREBASE CONFIG HERE
+     *********************************************************/
+    const firebaseConfig = {
+        apiKey: "AIzaSyBUbmtR7uU9YaUDeGDOS4Q-IP2zC90kPmc",
+        authDomain: "secret-santa-d2b69.firebaseapp.com",
+        projectId: "secret-santa-d2b69",
+        storageBucket: "secret-santa-d2b69.appspot.com",
+        messagingSenderId: "190272496238",
+        appId: "1:190272496238:web:4547ce0af13692973dfc7f",
+        measurementId: "G-F5NZFG8298"
+    };
 
-        // INIT
-        function init() {
-            populateSantaDropdown();
-            assignSecretSanta();
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    /*********************************************************
+     * 👥 PARTICIPANTS LIST — customize any time
+     *********************************************************/
+    const people = [
+        "Alice Johnson",
+        "Bob Smith",
+        "Carol White",
+        "David Brown",
+        "Emma Davis",
+        "Frank Miller",
+        "Grace Lee",
+        "Henry Wilson"
+    ];
+
+    const select = document.getElementById("nameSelect");
+    const resultDiv = document.getElementById("assignmentResult");
+
+    /*********************************************************
+     * 🎁 LOAD OR CREATE ASSIGNMENTS (ASYNC)
+     *********************************************************/
+    let assignments = {};
+
+    async function loadAssignments() {
+        const docRef = db.collection("secretSanta").doc("assignments");
+        const snapshot = await docRef.get();
+
+        if (snapshot.exists) {
+            console.log("Loaded saved assignments.");
+            assignments = snapshot.data();
+        } else {
+            console.log("No assignments found — generating new ones!");
+            assignments = generateAssignments();
+            await docRef.set(assignments);
+            console.log("Assignments saved to Firestore.");
         }
 
-        // Populate dropdown with names
-        function populateSantaDropdown() {
-            const select = document.getElementById("santaNameSelect");
+        // CLEAR UI & ENABLE DROPDOWN
+        initializeDropdown();
+    }
 
-            while (select.options.length > 1) {
-                select.remove(1);
+    /*********************************************************
+     * 🔄 GENERATE SECRET SANTA PAIRS
+     *********************************************************/
+    function generateAssignments() {
+        const shuffled = [...people];
+        shuffle(shuffled);
+
+        // Prevent self-assignment
+        for (let i = 0; i < people.length; i++) {
+            if (people[i] === shuffled[i]) {
+                return generateAssignments(); // regen
             }
-
-            Object.keys(people).forEach(name => {
-                const option = document.createElement("option");
-                option.value = name;
-                option.textContent = name;
-                select.appendChild(option);
-            });
         }
 
-        // Shuffle helper
-        function shuffleArray(array) {
-            const arr = [...array];
-            for (let i = arr.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [arr[i], arr[j]] = [arr[j], arr[i]];
-            }
-            return arr;
+        const result = {};
+        for (let i = 0; i < people.length; i++) {
+            result[people[i]] = shuffled[i];
+        }
+        return result;
+    }
+
+    // Fisher-Yates shuffle
+    function shuffle(arr) {
+        for (let i = arr.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+    }
+
+    /*********************************************************
+     * 🎄 ENABLE UI ONLY AFTER FIRESTORE LOADS
+     *********************************************************/
+    function initializeDropdown() {
+        // Clear placeholder
+        select.innerHTML = '<option value="">-- Choose Your Name --</option>';
+
+        // Populate names
+        people.forEach(name => {
+            const opt = document.createElement("option");
+            opt.value = name;
+            opt.textContent = name;
+            select.appendChild(opt);
+        });
+
+        // Reset UI
+        select.value = "";
+        resultDiv.innerHTML = "";
+
+        // ENABLE DROPDOWN
+        select.disabled = false;
+    }
+
+    /*********************************************************
+     * 👀 SHOW USER THEIR RECIPIENT
+     *********************************************************/
+    function showAssignment() {
+        const name = select.value;
+
+        if (!name) {
+            resultDiv.innerHTML = "";
+            return;
         }
 
-        // Assign Santa recipients
-        function assignSecretSanta() {
-            const peopleArray = Object.entries(people);
-            let shuffled = shuffleArray(peopleArray);
+        const recipient = assignments[name];
 
-            let valid = false;
-            let attempts = 0;
-
-            while (!valid && attempts < 100) {
-                valid = true;
-                for (let i = 0; i < peopleArray.length; i++) {
-                    if (peopleArray[i][0] === shuffled[i][0]) {
-                        valid = false;
-                        shuffled = shuffleArray(peopleArray);
-                        break;
-                    }
-                }
-                attempts++;
-            }
-
-            if (!valid) {
-                document.getElementById("resultMessage").textContent =
-                    "❌ Could not generate valid assignments — refresh.";
-                return;
-            }
-
-            santaAssignments = {};
-            peopleArray.forEach((entry, i) => {
-                santaAssignments[entry[0]] = {
-                    name: shuffled[i][0],
-                    phone: shuffled[i][1]
-                };
-            });
-
-            document.getElementById("resultMessage").textContent =
-                "✨ Secret Santas have been assigned!";
-        }
-
-        // Show a person's assigned recipient
-        function showAssignment() {
-            const selected = document.getElementById("santaNameSelect").value;
-            const result = document.getElementById("assignmentResult");
-
-            if (!selected) {
-                result.innerHTML = "";
-                return;
-            }
-
-            const recipient = santaAssignments[selected];
-
-            result.innerHTML = `
-                <div class="recipient-display">
-                    <h2>You are the Secret Santa for:</h2>
-                    <div class="assigned-recipient">
-                        <div class="person-name">${recipient.name}</div>
-                        <div class="person-phone">${recipient.phone}</div>
-                    </div>
-                    <p style="color:#667eea; font-style:italic;">Keep it a secret! 🤫</p>
+        resultDiv.innerHTML = `
+            <div class="recipient-display">
+                <h2>You are Secret Santa for:</h2>
+                <div class="assigned-recipient">
+                    <div class="person-name">${recipient}</div>
                 </div>
-            `;
-        }
+                <p style="color:#667eea;">Keep it a secret! 🤫</p>
+            </div>
+        `;
+    }
 
-        document.addEventListener("DOMContentLoaded", init);
-    </script>
+    /*********************************************************
+     * 🚀 START APPLICATION
+     *********************************************************/
+    loadAssignments();
+</script>
+
 </body>
 </html>
